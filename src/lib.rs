@@ -11,8 +11,10 @@ mod object_info;
 mod object_rendering;
 mod possible_events;
 mod project_file;
+mod settings;
 mod smart_naming;
 
+pub use settings::DesignerSettings;
 pub use editor_project::EditorProject;
 pub use interactive_rendering_simple::InteractiveMaskRenderer;
 pub use object_configuring::ConfigurableObject;

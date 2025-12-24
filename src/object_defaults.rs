@@ -9,7 +9,10 @@ use ag_iso_stack::{
     object_pool::{object::*, object_attributes::*, NullableObjectId, ObjectId, ObjectType},
 };
 
-pub fn default_object(obj_type: ObjectType) -> Object {
+pub fn default_object(
+    obj_type: ObjectType,
+    pool: Option<&ag_iso_stack::object_pool::ObjectPool>,
+) -> Object {
     match obj_type {
         ObjectType::WorkingSet => Object::WorkingSet(default_working_set()),
         ObjectType::DataMask => Object::DataMask(default_data_mask()),
@@ -19,11 +22,11 @@ pub fn default_object(obj_type: ObjectType) -> Object {
         ObjectType::Key => Object::Key(default_key()),
         ObjectType::Button => Object::Button(default_button()),
         ObjectType::InputBoolean => Object::InputBoolean(default_input_boolean()),
-        ObjectType::InputString => Object::InputString(default_input_string()),
-        ObjectType::InputNumber => Object::InputNumber(default_input_number()),
+        ObjectType::InputString => Object::InputString(default_input_string(pool)),
+        ObjectType::InputNumber => Object::InputNumber(default_input_number(pool)),
         ObjectType::InputList => Object::InputList(default_input_list()),
-        ObjectType::OutputString => Object::OutputString(default_output_string()),
-        ObjectType::OutputNumber => Object::OutputNumber(default_output_number()),
+        ObjectType::OutputString => Object::OutputString(default_output_string(pool)),
+        ObjectType::OutputNumber => Object::OutputNumber(default_output_number(pool)),
         ObjectType::OutputLine => Object::OutputLine(default_output_line()),
         ObjectType::OutputRectangle => Object::OutputRectangle(default_output_rectangle()),
         ObjectType::OutputEllipse => Object::OutputEllipse(default_output_ellipse()),
@@ -187,13 +190,20 @@ fn default_input_boolean() -> InputBoolean {
     }
 }
 
-fn default_input_string() -> InputString {
+fn default_input_string(pool: Option<&ag_iso_stack::object_pool::ObjectPool>) -> InputString {
+    let font_id = pool
+        .and_then(|p| {
+            p.objects_by_type(ObjectType::FontAttributes)
+                .first()
+                .map(|f| f.id())
+        })
+        .unwrap_or_else(|| ObjectId::new(0).unwrap());
     InputString {
         id: ObjectId::new(0).unwrap(),
         width: 0,
         height: 0,
         background_colour: 0,
-        font_attributes: ObjectId::new(0).unwrap(),
+        font_attributes: font_id,
         input_attributes: NullableObjectId::NULL,
         options: InputStringOptions {
             transparent: false,
@@ -211,13 +221,20 @@ fn default_input_string() -> InputString {
     }
 }
 
-fn default_input_number() -> InputNumber {
+fn default_input_number(pool: Option<&ag_iso_stack::object_pool::ObjectPool>) -> InputNumber {
+    let font_id = pool
+        .and_then(|p| {
+            p.objects_by_type(ObjectType::FontAttributes)
+                .first()
+                .map(|f| f.id())
+        })
+        .unwrap_or_else(|| ObjectId::new(0).unwrap());
     InputNumber {
         id: ObjectId::new(0).unwrap(),
         width: 0,
         height: 0,
         background_colour: 0,
-        font_attributes: ObjectId::new(0).unwrap(),
+        font_attributes: font_id,
         options: NumberOptions {
             transparent: false,
             display_leading_zeros: false,
@@ -260,13 +277,20 @@ fn default_input_list() -> InputList {
     }
 }
 
-fn default_output_string() -> OutputString {
+fn default_output_string(pool: Option<&ag_iso_stack::object_pool::ObjectPool>) -> OutputString {
+    let font_id = pool
+        .and_then(|p| {
+            p.objects_by_type(ObjectType::FontAttributes)
+                .first()
+                .map(|f| f.id())
+        })
+        .unwrap_or_else(|| ObjectId::new(0).unwrap());
     OutputString {
         id: ObjectId::new(0).unwrap(),
         width: 0,
         height: 0,
         background_colour: 0,
-        font_attributes: ObjectId::new(0).unwrap(),
+        font_attributes: font_id,
         options: OutputStringOptions {
             transparent: false,
             auto_wrap: false,
@@ -282,13 +306,20 @@ fn default_output_string() -> OutputString {
     }
 }
 
-fn default_output_number() -> OutputNumber {
+fn default_output_number(pool: Option<&ag_iso_stack::object_pool::ObjectPool>) -> OutputNumber {
+    let font_id = pool
+        .and_then(|p| {
+            p.objects_by_type(ObjectType::FontAttributes)
+                .first()
+                .map(|f| f.id())
+        })
+        .unwrap_or_else(|| ObjectId::new(0).unwrap());
     OutputNumber {
         id: ObjectId::new(0).unwrap(),
         width: 0,
         height: 0,
         background_colour: 0,
-        font_attributes: ObjectId::new(0).unwrap(),
+        font_attributes: font_id,
         options: NumberOptions {
             transparent: false,
             display_leading_zeros: false,
@@ -298,7 +329,7 @@ fn default_output_number() -> OutputNumber {
         variable_reference: NullableObjectId::NULL,
         value: 0,
         offset: 0,
-        scale: 0.0,
+        scale: 1.0,
         nr_of_decimals: 0,
         format: FormatType::Decimal,
         justification: Alignment {
@@ -766,3 +797,4 @@ fn default_scaled_graphic() -> ScaledGraphic {
         macro_refs: vec![],
     }
 }
+

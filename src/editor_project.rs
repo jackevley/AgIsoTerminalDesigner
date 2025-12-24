@@ -73,47 +73,167 @@ impl From<ObjectPool> for EditorProject {
 }
 
 impl EditorProject {
+    /// Copy selected objects exactly (preserve IDs and references)
+    pub fn copy_selected_objects_exact(&self) -> Vec<Object> {
+        let mut result = Vec::new();
+        if let Some(id) = self.selected_object.0 {
+            if let Some(obj) = self.pool.object_by_id(id) {
+                result.push(obj.clone());
+            }
+        }
+        result
+    }
+
+    /// Copy selected objects as new (generate new IDs and update references)
+    pub fn copy_selected_objects_as_new(&mut self) -> Vec<Object> {
+        let mut result = Vec::new();
+        if let Some(id) = self.selected_object.0 {
+            if let Some(obj) = self.pool.object_by_id(id) {
+                let mut new_obj = obj.clone();
+                let new_id = self.allocate_object_id_for_type(obj.object_type());
+                // Set new ID by matching variant
+                match &mut new_obj {
+                    Object::WorkingSet(o) => o.id = new_id,
+                    Object::DataMask(o) => o.id = new_id,
+                    Object::AlarmMask(o) => o.id = new_id,
+                    Object::Container(o) => o.id = new_id,
+                    Object::SoftKeyMask(o) => o.id = new_id,
+                    Object::Key(o) => o.id = new_id,
+                    Object::Button(o) => o.id = new_id,
+                    Object::InputBoolean(o) => o.id = new_id,
+                    Object::InputString(o) => o.id = new_id,
+                    Object::InputNumber(o) => o.id = new_id,
+                    Object::InputList(o) => o.id = new_id,
+                    Object::OutputString(o) => o.id = new_id,
+                    Object::OutputNumber(o) => o.id = new_id,
+                    Object::OutputLine(o) => o.id = new_id,
+                    Object::OutputRectangle(o) => o.id = new_id,
+                    Object::OutputEllipse(o) => o.id = new_id,
+                    Object::OutputPolygon(o) => o.id = new_id,
+                    Object::OutputMeter(o) => o.id = new_id,
+                    Object::OutputLinearBarGraph(o) => o.id = new_id,
+                    Object::OutputArchedBarGraph(o) => o.id = new_id,
+                    Object::PictureGraphic(o) => o.id = new_id,
+                    Object::NumberVariable(o) => o.id = new_id,
+                    Object::StringVariable(o) => o.id = new_id,
+                    Object::FontAttributes(o) => o.id = new_id,
+                    Object::LineAttributes(o) => o.id = new_id,
+                    Object::FillAttributes(o) => o.id = new_id,
+                    Object::InputAttributes(o) => o.id = new_id,
+                    Object::ObjectPointer(o) => o.id = new_id,
+                    Object::Macro(o) => o.id = new_id,
+                    Object::AuxiliaryFunctionType1(o) => o.id = new_id,
+                    Object::AuxiliaryInputType1(o) => o.id = new_id,
+                    Object::AuxiliaryFunctionType2(o) => o.id = new_id,
+                    Object::AuxiliaryInputType2(o) => o.id = new_id,
+                    Object::AuxiliaryControlDesignatorType2(o) => o.id = new_id,
+                    Object::WindowMask(o) => o.id = new_id,
+                    Object::KeyGroup(o) => o.id = new_id,
+                    Object::GraphicsContext(o) => o.id = new_id,
+                    Object::OutputList(o) => o.id = new_id,
+                    Object::ExtendedInputAttributes(o) => o.id = new_id,
+                    Object::ColourMap(o) => o.id = new_id,
+                    Object::ObjectLabelReferenceList(o) => o.id = new_id,
+                    Object::ExternalObjectDefinition(o) => o.id = new_id,
+                    Object::ExternalReferenceName(o) => o.id = new_id,
+                    Object::ExternalObjectPointer(o) => o.id = new_id,
+                    Object::Animation(o) => o.id = new_id,
+                    Object::ColourPalette(o) => o.id = new_id,
+                    Object::GraphicData(o) => o.id = new_id,
+                    Object::WorkingSetSpecialControls(o) => o.id = new_id,
+                    Object::ScaledGraphic(o) => o.id = new_id,
+                }
+                // TODO: Update references inside new_obj if needed
+                result.push(new_obj);
+            }
+        }
+        result
+    }
+
+    /// Paste objects into the pool
+    pub fn paste_objects(&mut self, objects: Vec<Object>) {
+        {
+            let mut pool = self.mut_pool.borrow_mut();
+            for obj in objects {
+                pool.add(obj);
+            }
+        } // pool is dropped here before update_pool is called
+        self.update_pool();
+    }
     /// Get the current object pool
     pub fn get_pool(&self) -> &ObjectPool {
         &self.pool
     }
 
-    /// Allocate a new unique object ID efficiently
-    pub fn allocate_object_id(&self) -> ObjectId {
-        let mut next_id = self.next_available_id.borrow_mut();
+    /// Returns the allowed ID range for a given object type
+    pub fn object_id_range(object_type: ObjectType) -> std::ops::RangeInclusive<u16> {
+        match object_type {
+            ObjectType::WorkingSet => 0..=0,
+            ObjectType::DataMask => 1000..=1999,
+            ObjectType::AlarmMask => 2000..=2999,
+            ObjectType::Container => 3000..=3999,
+            ObjectType::SoftKeyMask => 4000..=4999,
+            ObjectType::Key => 5000..=5999,
+            ObjectType::Button => 6000..=6999,
+            ObjectType::InputBoolean => 7000..=7999,
+            ObjectType::InputString => 8000..=8999,
+            ObjectType::InputNumber => 9000..=9999,
+            ObjectType::InputList => 10000..=10999,
+            ObjectType::OutputString => 11000..=11999,
+            ObjectType::OutputNumber => 12000..=12999,
+            ObjectType::OutputList => 37000..=37999,
+            ObjectType::OutputLine => 13000..=13999,
+            ObjectType::OutputRectangle => 14000..=14999,
+            ObjectType::OutputEllipse => 15000..=15999,
+            ObjectType::OutputPolygon => 16000..=16999,
+            ObjectType::OutputMeter => 17000..=17999,
+            ObjectType::OutputLinearBarGraph => 18000..=18999,
+            ObjectType::OutputArchedBarGraph => 19000..=19999,
+            ObjectType::PictureGraphic => 20000..=20999,
+            ObjectType::NumberVariable => 21000..=21999,
+            ObjectType::StringVariable => 22000..=22999,
+            ObjectType::FontAttributes => 23000..=23999,
+            ObjectType::LineAttributes => 24000..=24999,
+            ObjectType::FillAttributes => 25000..=25999,
+            ObjectType::InputAttributes => 26000..=26999,
+            ObjectType::ObjectPointer => 27000..=27999,
+            ObjectType::Macro => 28000..=28999,
+            ObjectType::AuxiliaryFunctionType1 => 29000..=29999,
+            ObjectType::AuxiliaryInputType1 => 30000..=30999,
+            ObjectType::AuxiliaryFunctionType2 => 31000..=31999,
+            ObjectType::AuxiliaryInputType2 => 32000..=32999,
+            ObjectType::AuxiliaryControlDesignatorType2 => 33000..=33999,
+            ObjectType::ColourMap => 34000..=34999,
+            ObjectType::GraphicsContext => 35000..=35999,
+            ObjectType::ColourPalette => 36000..=36999,
+            ObjectType::GraphicData => 37000..=37999,
+            ObjectType::WorkingSetSpecialControls => 38000..=38999,
+            ObjectType::ScaledGraphic => 39000..=39999,
+            ObjectType::WindowMask => 40000..=40999,
+            ObjectType::KeyGroup => 41000..=41999,
+            ObjectType::ExtendedInputAttributes => 42000..=42999,
+            ObjectType::ExternalObjectPointer => 43000..=43999,
+            ObjectType::ExternalObjectDefinition => 44000..=44999,
+            ObjectType::ExternalReferenceName => 45000..=45999,
+            ObjectType::ObjectLabelReferenceList => 46000..=46999,
+            ObjectType::Animation => 47000..=47999,
+        }
+    }
 
-        // Find the next available ID starting from our cached value
-        while self
-            .pool
-            .object_by_id(ObjectId::new(*next_id).unwrap_or_default())
-            .is_some()
-        {
-            *next_id = next_id.saturating_add(1);
-
-            if *next_id == u16::MAX {
-                // If we've reached the "NULL" object ID, do a full scan to find any gaps
-                let mut found = false;
-                for id in 1..=u16::MAX {
-                    if self
-                        .pool
-                        .object_by_id(ObjectId::new(id).unwrap_or_default())
-                        .is_none()
-                    {
-                        *next_id = id;
-                        found = true;
-                        break;
-                    }
-                }
-                if !found {
-                    panic!("No available ObjectId: all IDs from 1 to u16::MAX are taken.");
-                }
-                break;
+    /// Allocate a new unique object ID within the allowed range for the given object type
+    pub fn allocate_object_id_for_type(&self, object_type: ObjectType) -> ObjectId {
+        let range = Self::object_id_range(object_type);
+        let pool = &self.pool;
+        for id in range.clone() {
+            let oid = ObjectId::new(id).unwrap_or_default();
+            if pool.object_by_id(oid).is_none() {
+                return oid;
             }
         }
-
-        let allocated_id = ObjectId::new(*next_id).unwrap_or_default();
-        *next_id = next_id.saturating_add(1);
-        allocated_id
+        panic!(
+            "No available ObjectId in range {:?} for {:?}",
+            range, object_type
+        );
     }
 
     /// Update the next available ID cache based on the current pool

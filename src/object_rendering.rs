@@ -856,7 +856,7 @@ impl RenderableObject for OutputString {
                     )
                     .size();
 
-                font_height = size.height() as f32 * (font_size.x / size.width() as f32);
+                font_height = size.height() as f32 * (size.width() as f32 / font_size.x);
             }
             FontSize::Proportional(height) => {
                 font_height = height as f32;
@@ -868,191 +868,190 @@ impl RenderableObject for OutputString {
         } else {
             f32::INFINITY
         };
-        let galley = fonts.layout(
-            processed_text,
-            FontId::new(font_height, font_family.clone()),
-            font_colour,
-            wrap_width,
-        );
+        //let galley = fonts.layout(
+        //    processed_text,
+        //    FontId::new(font_height, font_family.clone()),
+        //    font_colour,
+        //    wrap_width,
+        //);
 
-        //let fonts = ui.fonts(|fonts| fonts.clone());
+        let fonts = ui.fonts(|fonts| fonts.clone());
+        //For non-proportional fonts, implement manual wrapping if auto_wrap is enabled
+        if let FontSize::NonProportional(size) = font_attributes.font_size {
+            if !transparent {
+                let painter = ui.painter();
+                painter.rect_filled(rect, 0.0, background_colour);
+            }
+            let char_width = size.width() as f32;
+            let char_height = size.height() as f32;
+            let max_chars_per_line = if auto_wrap {
+                (self.width() as f32 / char_width).floor().max(1.0) as usize
+            } else {
+                usize::MAX
+            };
+            // Define font_id for monospace font
+            let font_id = egui::FontId::new(char_height, egui::FontFamily::Monospace);
+            // Split into lines, then wrap each line if needed
+            let mut wrapped_lines = Vec::new();
+            for line in processed_text.split('\n') {
+                if auto_wrap && line.chars().count() > max_chars_per_line {
+                    let mut current = String::new();
+                    for ch in line.chars() {
+                        current.push(ch);
+                        if current.chars().count() == max_chars_per_line {
+                            wrapped_lines.push(current.clone());
+                            current.clear();
+                        }
+                    }
+                    if !current.is_empty() {
+                        wrapped_lines.push(current);
+                    }
+                } else {
+                    wrapped_lines.push(line.to_string());
+                }
+            }
+            let total_text_height = char_height * wrapped_lines.len() as f32;
+            let mut y = match self.justification.vertical {
+                VerticalAlignment::Top => rect.min.y - 1.0,
+                VerticalAlignment::Middle => rect.center().y - (total_text_height * 0.5),
+                VerticalAlignment::Bottom => rect.max.y - total_text_height,
+                VerticalAlignment::Reserved => {
+                    ui.colored_label(
+                        Color32::RED,
+                        "Configuration incorrect: vertical alignment is set to Reserved",
+                    );
+                    return;
+                }
+            };
+            for line in &wrapped_lines {
+                let line_len = line.chars().count() as f32;
+                let line_width = char_width * line_len;
+                let x = match self.justification.horizontal {
+                    HorizontalAlignment::Left => rect.min.x,
+                    HorizontalAlignment::Middle => rect.center().x - (line_width * 0.5),
+                    HorizontalAlignment::Right => rect.max.x - line_width,
+                    HorizontalAlignment::Reserved => {
+                        ui.colored_label(
+                            Color32::RED,
+                            "Configuration incorrect: horizontal alignment is set to Reserved",
+                        );
+                        return;
+                    }
+                };
+                let mut cx = x;
+                for ch in line.chars() {
+                    let galley = fonts.layout_no_wrap(ch.to_string(), font_id.clone(), font_colour);
+                    let pos = egui::pos2(cx, y); // Adjust y for baseline
+                    ui.painter().galley(pos, galley.clone(), font_colour);
+                    // Bold
+                    if font_attributes.font_style.bold {
+                        // Bold: draw the character again with a slight offset to simulate boldness
+                        let bold_offset = 1.0;
+                        let bold_pos = egui::pos2(cx + bold_offset, y);
+                        ui.painter().galley(bold_pos, galley.clone(), font_colour);
+                    }
+                    // Crossed out
+                    if font_attributes.font_style.crossed_out {
+                        let cross_y = pos.y + char_height / 2.0;
+                        ui.painter().line_segment(
+                            [
+                                egui::pos2(pos.x, cross_y),
+                                egui::pos2(pos.x + char_width, cross_y),
+                            ],
+                            egui::Stroke::new(1.0, font_colour),
+                        );
+                    }
+                    // Underline
+                    if font_attributes.font_style.underlined {
+                        let underline_y = pos.y + char_height - 2.0;
+                        ui.painter().line_segment(
+                            [
+                                egui::pos2(pos.x, underline_y),
+                                egui::pos2(pos.x + char_width, underline_y),
+                            ],
+                            egui::Stroke::new(1.0, font_colour),
+                        );
+                    }
+                    //itallic
+                    if font_attributes.font_style.italic {
+                        // Italic: draw the character with a slight skew to simulate italics
+                        let italic_offset = 2.0;
+                        let italic_pos = egui::pos2(cx + italic_offset, y);
+                        ui.painter().galley(italic_pos, galley.clone(), font_colour);
+                    }
+                    //inverted
+                    if font_attributes.font_style.inverted {
+                        let inverted_rect = egui::Rect::from_min_size(
+                            egui::pos2(cx, y),
+                            egui::vec2(char_width, char_height),
+                        );
+                        ui.painter().rect_filled(inverted_rect, 0.0, font_colour);
+                        let galley_inv = fonts.layout_no_wrap(
+                            ch.to_string(),
+                            font_id.clone(),
+                            background_colour,
+                        );
+                        ui.painter()
+                            .galley(egui::pos2(cx, y), galley_inv, background_colour);
+                    }
+                    cx += char_width;
+                }
+                y += char_height;
+            }
+        } else {
+            // Proportional font: use egui's normal layout
+            let font_id = egui::FontId::new(font_height, font_family);
+            let galley = fonts.layout(processed_text, font_id.clone(), font_colour, wrap_width);
 
-        // For non-proportional fonts, implement manual wrapping if auto_wrap is enabled
-        //if let FontSize::NonProportional(size) = font_attributes.font_size {
-        //    if !transparent {
-        //        let painter = ui.painter();
-        //        painter.rect_filled(rect, 0.0, background_colour);
-        //    }
-        //    let char_width = size.width() as f32;
-        //    let char_height = size.height() as f32;
-        //    let max_chars_per_line = if auto_wrap {
-        //        (self.width() as f32 / char_width).floor().max(1.0) as usize
-        //    } else {
-        //        usize::MAX
-        //    };
-        //    // Define font_id for monospace font
-        //    let font_id = egui::FontId::new(char_height, egui::FontFamily::Monospace);
-        //    // Split into lines, then wrap each line if needed
-        //    let mut wrapped_lines = Vec::new();
-        //    for line in processed_text.split('\n') {
-        //        if auto_wrap && line.chars().count() > max_chars_per_line {
-        //            let mut current = String::new();
-        //            for ch in line.chars() {
-        //                current.push(ch);
-        //                if current.chars().count() == max_chars_per_line {
-        //                    wrapped_lines.push(current.clone());
-        //                    current.clear();
-        //                }
-        //            }
-        //            if !current.is_empty() {
-        //                wrapped_lines.push(current);
-        //            }
-        //        } else {
-        //            wrapped_lines.push(line.to_string());
-        //        }
-        //    }
-        //    let total_text_height = char_height * wrapped_lines.len() as f32;
-        //    let mut y = match self.justification.vertical {
-        //        VerticalAlignment::Top => rect.min.y,
-        //        VerticalAlignment::Middle => rect.center().y - (total_text_height * 0.5),
-        //        VerticalAlignment::Bottom => rect.max.y - total_text_height,
-        //        VerticalAlignment::Reserved => {
-        //            ui.colored_label(
-        //                Color32::RED,
-        //                "Configuration incorrect: vertical alignment is set to Reserved",
-        //            );
-        //            return;
-        //        }
-        //    };
-        //    for line in &wrapped_lines {
-        //        let line_len = line.chars().count() as f32;
-        //        let line_width = char_width * line_len;
-        //        let x = match self.justification.horizontal {
-        //            HorizontalAlignment::Left => rect.min.x,
-        //            HorizontalAlignment::Middle => rect.center().x - (line_width * 0.5),
-        //            HorizontalAlignment::Right => rect.max.x - line_width,
-        //            HorizontalAlignment::Reserved => {
-        //                ui.colored_label(
-        //                    Color32::RED,
-        //                    "Configuration incorrect: horizontal alignment is set to Reserved",
-        //                );
-        //                return;
-        //            }
-        //        };
-        //        let mut cx = x;
-        //        for ch in line.chars() {
-        //            let galley = fonts.layout_no_wrap(ch.to_string(), font_id.clone(), font_colour);
-        //            let pos = egui::pos2(cx, y);
-        //            ui.painter().galley(pos, galley.clone(), font_colour);
-        //            // Bold
-        //            if font_attributes.font_style.bold {
-        //                // Bold: draw the character again with a slight offset to simulate boldness
-        //                let bold_offset = 1.0;
-        //                let bold_pos = egui::pos2(cx + bold_offset, y);
-        //                ui.painter().galley(bold_pos, galley.clone(), font_colour);
-        //            }
-        //            // Crossed out
-        //            if font_attributes.font_style.crossed_out {
-        //                let cross_y = pos.y + char_height / 2.0;
-        //                ui.painter().line_segment(
-        //                    [
-        //                        egui::pos2(pos.x, cross_y),
-        //                        egui::pos2(pos.x + char_width, cross_y),
-        //                    ],
-        //                    egui::Stroke::new(1.0, font_colour),
-        //                );
-        //            }
-        //            // Underline
-        //            if font_attributes.font_style.underlined {
-        //                let underline_y = pos.y + char_height - 2.0;
-        //                ui.painter().line_segment(
-        //                    [
-        //                        egui::pos2(pos.x, underline_y),
-        //                        egui::pos2(pos.x + char_width, underline_y),
-        //                    ],
-        //                    egui::Stroke::new(1.0, font_colour),
-        //                );
-        //            }
-        //            //itallic
-        //            if font_attributes.font_style.italic {
-        //                // Italic: draw the character with a slight skew to simulate italics
-        //                let italic_offset = 2.0;
-        //                let italic_pos = egui::pos2(cx + italic_offset, y);
-        //                ui.painter().galley(italic_pos, galley.clone(), font_colour);
-        //            }
-        //            //inverted
-        //            if font_attributes.font_style.inverted {
-        //                let inverted_rect = egui::Rect::from_min_size(
-        //                    egui::pos2(cx, y),
-        //                    egui::vec2(char_width, char_height),
-        //                );
-        //                ui.painter().rect_filled(inverted_rect, 0.0, font_colour);
-        //                let galley_inv = fonts.layout_no_wrap(
-        //                    ch.to_string(),
-        //                    font_id.clone(),
-        //                    background_colour,
-        //                );
-        //                ui.painter()
-        //                    .galley(egui::pos2(cx, y), galley_inv, background_colour);
-        //            }
-        //            cx += char_width;
-        //        }
-        //        y += char_height;
-        //    }
-        //} else {
-        // Proportional font: use egui's normal layout
-        //let font_id = egui::FontId::new(font_height, font_family);
-        //let galley = fonts.layout(processed_text, font_id.clone(), font_colour, wrap_width);
+            let text_size = galley.size();
 
-        let text_size = galley.size();
+            let mut paint_pos = rect.min;
 
-        let mut paint_pos = rect.min;
+            match self.justification.horizontal {
+                HorizontalAlignment::Left => {
+                    paint_pos.x = rect.min.x;
+                }
+                HorizontalAlignment::Middle => {
+                    paint_pos.x = rect.center().x - (text_size.x * 0.5);
+                }
+                HorizontalAlignment::Right => {
+                    paint_pos.x = rect.max.x - text_size.x;
+                }
+                HorizontalAlignment::Reserved => {
+                    ui.colored_label(
+                        Color32::RED,
+                        "Configuration incorrect: horizontal alignment is set to Reserved",
+                    );
+                    return;
+                }
+            };
 
-        match self.justification.horizontal {
-            HorizontalAlignment::Left => {
-                paint_pos.x = rect.min.x;
-            }
-            HorizontalAlignment::Middle => {
-                paint_pos.x = rect.center().x - (text_size.x * 0.5);
-            }
-            HorizontalAlignment::Right => {
-                paint_pos.x = rect.max.x - text_size.x;
-            }
-            HorizontalAlignment::Reserved => {
-                ui.colored_label(
-                    Color32::RED,
-                    "Configuration incorrect: horizontal alignment is set to Reserved",
-                );
-                return;
-            }
-        };
+            match self.justification.vertical {
+                VerticalAlignment::Top => {
+                    paint_pos.y = rect.min.y;
+                }
+                VerticalAlignment::Middle => {
+                    paint_pos.y = rect.center().y - (text_size.y * 0.5);
+                }
+                VerticalAlignment::Bottom => {
+                    paint_pos.y = rect.max.y - text_size.y;
+                }
+                VerticalAlignment::Reserved => {
+                    ui.colored_label(
+                        Color32::RED,
+                        "Configuration incorrect: vertical alignment is set to Reserved",
+                    );
+                    return;
+                }
+            };
 
-        match self.justification.vertical {
-            VerticalAlignment::Top => {
-                paint_pos.y = rect.min.y;
+            if !transparent {
+                let painter = ui.painter();
+                painter.rect_filled(rect, 0.0, background_colour);
             }
-            VerticalAlignment::Middle => {
-                paint_pos.y = rect.center().y - (text_size.y * 0.5);
-            }
-            VerticalAlignment::Bottom => {
-                paint_pos.y = rect.max.y - text_size.y;
-            }
-            VerticalAlignment::Reserved => {
-                ui.colored_label(
-                    Color32::RED,
-                    "Configuration incorrect: vertical alignment is set to Reserved",
-                );
-                return;
-            }
-        };
 
-        if !transparent {
-            let painter = ui.painter();
-            painter.rect_filled(rect, 0.0, background_colour);
+            ui.painter().galley(paint_pos, galley, font_colour);
         }
-
-        ui.painter().galley(paint_pos, galley, font_colour);
-        //}
     }
 }
 
@@ -1179,8 +1178,18 @@ impl RenderableObject for OutputNumber {
             let fonts = ui.fonts(|fonts| fonts.clone());
             let (font_family, font_height) = match font_attributes.font_size {
                 FontSize::NonProportional(npsize) => {
-                    // For simplicity, treat it as monospace
-                    (egui::FontFamily::Monospace, npsize.height() as f32)
+                    // Measure actual character width and scale font height accordingly
+                    // to ensure the visual size matches the specification
+                    let font_size = fonts
+                        .layout_no_wrap(
+                            "0".into(),
+                            FontId::new(npsize.height() as f32, egui::FontFamily::Monospace),
+                            font_colour,
+                        )
+                        .size();
+                    let scaled_height =
+                        npsize.height() as f32 * (font_size.x / npsize.width() as f32);
+                    (egui::FontFamily::Monospace, scaled_height)
                 }
                 FontSize::Proportional(h) => (egui::FontFamily::Proportional, h as f32),
             };
@@ -1216,7 +1225,7 @@ impl RenderableObject for OutputNumber {
             }
             match self.justification.vertical {
                 VerticalAlignment::Top => {
-                    paint_pos.y = rect.min.y;
+                    paint_pos.y = rect.min.y + 1.0;
                 }
                 VerticalAlignment::Middle => {
                     paint_pos.y = rect.center().y - (text_size.y * 0.5);

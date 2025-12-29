@@ -191,12 +191,14 @@ impl DesignerApp {
         // Configure monospace font for NonProportional block fonts
         // The monospace font will be used for rendering NonProportional text blocks
         // which are constrained to fit within their defined box dimensions (e.g., 24×32px per character)
-        fonts.families
+        fonts
+            .families
             .get_mut(&egui::FontFamily::Monospace)
             .unwrap()
             .clear();
         // Use system monospace fonts as fallback
-        fonts.families
+        fonts
+            .families
             .get_mut(&egui::FontFamily::Monospace)
             .unwrap()
             .extend_from_slice(&[
@@ -647,9 +649,29 @@ fn render_selectable_object(
                 project.set_renaming_object(this_ui_id, object.id(), object_info.get_name(object));
                 ui.close();
             }
-            if ui.button("Delete").on_hover_text("Delete object").clicked() {
-                project.get_mut_pool().borrow_mut().remove(object.id());
-                ui.close();
+            if multi_selected.is_empty() {
+                if ui.button("Delete").on_hover_text("Delete object").clicked() {
+                    project.get_mut_pool().borrow_mut().remove(object.id());
+                    ui.close();
+                }
+            } else {
+                let delete_text = if multi_selected.len() == 1 {
+                    "Delete".to_string()
+                } else {
+                    format!("Delete {} selected", multi_selected.len())
+                };
+                if ui
+                    .button(&delete_text)
+                    .on_hover_text("Delete all selected objects")
+                    .clicked()
+                {
+                    let ids_to_delete: Vec<_> = multi_selected.iter().copied().collect();
+                    for id in ids_to_delete {
+                        project.get_mut_pool().borrow_mut().remove(id);
+                    }
+                    multi_selected.clear();
+                    ui.close();
+                }
             }
             if ui
                 .button("Set as main focus")
@@ -1271,30 +1293,8 @@ impl eframe::App for DesignerApp {
                             );
                         }
                     }
-                    ui.allocate_space(ui.available_size());
 
-                    // In the object list panel, after the filter and before the object list rendering:
-                    if !object_list_multi_selected_ptr.is_empty() {
-                        if ui
-                            .button("Delete Selected")
-                            .on_hover_text("Delete all selected objects (Del)")
-                            .clicked()
-                        {
-                            let ids_to_delete: Vec<_> =
-                                object_list_multi_selected_ptr.iter().copied().collect();
-                            for id in ids_to_delete {
-                                pool.get_mut_pool().borrow_mut().remove(id);
-                            }
-                            object_list_multi_selected_ptr.clear();
-                            // Optionally clear last_object_list_selected
-                            ctx.data_mut(|d| {
-                                d.insert_temp(
-                                    egui::Id::new("last_object_list_selected"),
-                                    None::<ObjectId>,
-                                )
-                            });
-                        }
-                    }
+                    ui.allocate_space(ui.available_size());
                 });
             });
 
